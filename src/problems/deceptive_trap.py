@@ -7,6 +7,8 @@ class DeceptiveTrap(BaseProblem):
 
     def evaluate(self, individual):
         fitness = 0.0
+        num_traps = len(individual) // self.trap_size
+
         for i in range(0, len(individual), self.trap_size):
             sub_block = individual[i:i + self.trap_size]
             u = np.sum(sub_block)   
@@ -18,4 +20,4 @@ class DeceptiveTrap(BaseProblem):
             
             fitness += sub_fitness
 
-        return fitness
+        return fitness / num_traps

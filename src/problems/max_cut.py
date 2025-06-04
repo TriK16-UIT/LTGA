@@ -30,6 +30,8 @@ class WeightedMAXCUT(BaseProblem):
                 self.weight_matrix[j, i] = scaled_weights[edge_idx]
                 edge_idx += 1
 
+        self.total_weight = np.sum(self.weight_matrix) / 2
+
     def evaluate(self, individual):
         if len(individual) != self.n:
             raise ValueError(f"Individual length ({len(individual)}) must match number of nodes (n={self.n})")
@@ -41,4 +43,4 @@ class WeightedMAXCUT(BaseProblem):
                 if individual[i] != individual[j]:
                     cut_weight += self.weight_matrix[i, j]
 
-        return cut_weight
+        return cut_weight / self.total_weight

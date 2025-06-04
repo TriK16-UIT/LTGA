@@ -6,6 +6,6 @@ class OneMax(BaseProblem):
         pass
 
     def evaluate(self, individual):
-        return np.sum(individual)
+        return np.sum(individual) / len(individual)
 
 

@@ -17,6 +17,7 @@ class LTGA:
         self.clusters = None
         self.best_solution = None
         self.best_fitness = float('-inf')
+        self.total_evaluations = 0  
 
     def initialize_population(self):
         self.population = self.rng.randint(0, 2, size=(self.population_size, self.problem_size))
@@ -24,17 +25,17 @@ class LTGA:
 
         for i in range(self.population_size):
             self.fitness_values[i] = self.problem.evaluate(self.population[i])
-            
-        best_idx = np.argmax(self.fitness_values)
-        self.best_fitness = self.fitness_values[best_idx]
-        self.best_solution = self.population[best_idx].copy()
+            self.total_evaluations += 1  
 
     def tournament_selection(self, tournament_size=2):
+        if self.population_size == 1:
+            return
+        
         selected_indices = np.zeros(self.population_size, dtype=int)
         
         for i in range(self.population_size):
-            tournament_indices = self.rng.choice(self.population_size, tournament_size, replace=False)
-            
+            replace_flag = self.population_size < tournament_size
+            tournament_indices = self.rng.choice(self.population_size, tournament_size, replace=replace_flag)
             tournament_fitness = self.fitness_values[tournament_indices]
             winner_in_tournament = np.argmax(tournament_fitness)     
             selected_indices[i] = tournament_indices[winner_in_tournament]
@@ -51,96 +52,89 @@ class LTGA:
         for i in range(n_vars):
             for j in range(i + 1, n_vars):
                 distance = self.measure.calculate(self.population, i, j)
-                
                 if not self.measure.is_distance_measure:
                     distance = 1.0 - distance
-                
                 condensed_distance[idx] = distance
                 idx += 1
 
         self.linkage_tree = linkage(condensed_distance, method='average')
 
-
         clusters = []
-
         current_clusters = {i: [i] for i in range(n_vars)}
         next_cluster_idx = n_vars
         
         for row in self.linkage_tree:
             i, j = int(row[0]), int(row[1])
-
             new_cluster = current_clusters[i] + current_clusters[j]
             clusters.append(new_cluster)
-
             current_clusters[next_cluster_idx] = new_cluster
             next_cluster_idx += 1
 
         self.clusters = clusters
-        
+
     def genepool_optimal_mixing(self):
+        new_population = []
+        new_fitness = []
+
         for i in range(self.population_size):
-            solution = self.population[i].copy()
-            original_fitness = self.fitness_values[i]
-            improved = False
+            solution, fitness_value = self.fi_gom(self.population[i], self.fitness_values[i])
+            new_population.append(solution)
+            new_fitness.append(fitness_value)
 
-            shuffled_cluster_indices = self.rng.permutation(len(self.clusters))
+        self.population = np.array(new_population)
+        self.fitness_values = np.array(new_fitness)
 
+    def fi_gom(self, solution, fitness_value):
+        b = solution.copy()
+        fitness_b = fitness_value
+        improved = False
+
+        shuffled_cluster_indices = self.rng.permutation(len(self.clusters))
+
+        # Standard GOM phase
+        for idx in shuffled_cluster_indices:
+            cluster = self.clusters[idx]
+
+            donor_idx = self.rng.choice(self.population_size)
+            donor = self.population[donor_idx]
+            o = b.copy()
+            o[cluster] = donor[cluster]
+
+            if not np.array_equal(o[cluster], b[cluster]):
+                fitness_o = self.problem.evaluate(o)
+                self.total_evaluations += 1  
+
+                if fitness_o > fitness_b:
+                    b[cluster] = o[cluster]
+                    fitness_b = fitness_o
+                    improved = True
+                else:
+                    o[cluster] = b[cluster]  
+
+        # Forced Improvement phase if not improved in normal GOM
+        if not improved:
             for idx in shuffled_cluster_indices:
                 cluster = self.clusters[idx]
-                
-                if len(cluster) <= 1:
-                    continue
+                o = b.copy()
+                o[cluster] = self.best_solution[cluster]
 
-                donor_candidates = np.arange(self.population_size)
-                donor_candidates = donor_candidates[donor_candidates != i]  
-                donor_idx = self.rng.choice(donor_candidates, 1)[0]
+                if not np.array_equal(o[cluster], b[cluster]):
+                    fitness_o = self.problem.evaluate(o)
+                    self.total_evaluations += 1  
 
-                new_solution = solution.copy()
-                new_solution[cluster] = self.population[donor_idx, cluster]
-
-                new_fitness = self.problem.evaluate(new_solution)
-                
-                if new_fitness >= self.fitness_values[i]:
-                    solution = new_solution
-                    self.fitness_values[i] = new_fitness
-                    improved = True
-
-                    if new_fitness > self.best_fitness:
-                        self.best_fitness = new_fitness
-                        self.best_solution = new_solution.copy()
-
-            self.population[i] = solution
-
-            if not improved:
-                self.population[i] = self.forced_improvement(solution, i)
-
-    def forced_improvement(self, solution, idx):
-        fi_solution = solution.copy()
-        original_fitness = self.problem.evaluate(fi_solution)
-        
-        shuffled_cluster_indices = self.rng.permutation(len(self.clusters))
-        
-        for c_idx in shuffled_cluster_indices:
-            cluster = self.clusters[c_idx]
+                    if fitness_o > fitness_b:
+                        b[cluster] = o[cluster]
+                        fitness_b = fitness_o
+                        break  
+                    else:
+                        o[cluster] = b[cluster]  
             
-            if len(cluster) <= 1:
-                continue
-            
-            new_solution = fi_solution.copy()
-            new_solution[cluster] = self.best_solution[cluster]
-            
-            new_fitness = self.problem.evaluate(new_solution)
-            
-            if new_fitness > original_fitness:
-                fi_solution = new_solution
-                self.fitness_values[idx] = new_fitness
-                original_fitness = new_fitness
-                
-                if new_fitness >= self.best_fitness:
-                    break
-        
-        return fi_solution
-    
+            if fitness_b == fitness_value:
+                b = self.best_solution.copy()
+                fitness_b = self.best_fitness
+
+        return b, fitness_b
+
     def has_converged(self):
         if self.population is None or len(self.population) == 0:
             return False
@@ -150,19 +144,22 @@ class LTGA:
     def run(self):
         if self.population is None:
             self.initialize_population()
+
+        self.best_fitness = np.max(self.fitness_values)
+        self.best_solution = self.population[np.argmax(self.fitness_values)].copy()
         
         generation = 0
         converged = False
         
         while (self.max_generations is None or generation < self.max_generations) and not converged:
             self.tournament_selection()
-            
             self.learn_linkage_tree()
-            
             self.genepool_optimal_mixing()
-            
+
+            self.best_fitness = np.max(self.fitness_values)
+            self.best_solution = self.population[np.argmax(self.fitness_values)].copy()
+
             converged = self.has_converged()
-            
             generation += 1
         
-        return self.best_solution, self.best_fitness                 
+        return self.best_solution, self.best_fitness, self.total_evaluations  
