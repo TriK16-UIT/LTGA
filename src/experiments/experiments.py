@@ -2,6 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from LGTA.ltga import LTGA
+import os
+import pickle
+
+def save_experiment_results(all_results, filename):
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, 'wb') as f:
+        pickle.dump(all_results, f)
+
+def load_experiment_results(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
 
 # -----------------------------
 # Experiment core functions
@@ -97,7 +108,7 @@ def run_experiments(problem_class, measures_dict, problem_sizes, max_generations
 # Plotting functions
 # -----------------------------
 
-def plot_population_results(problem_name, all_results):
+def plot_population_results(problem_name, all_results, save_dir = "plots"):
     plt.figure(figsize=(7, 5))
 
     colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
@@ -131,9 +142,14 @@ def plot_population_results(problem_name, all_results):
     plt.xscale("log")
     plt.legend()
     plt.grid()
+
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        plt.savefig(os.path.join(save_dir, f"{problem_name}_population.png"), dpi=300, bbox_inches='tight')
+
     plt.show()
 
-def plot_evaluation_results(problem_name, all_results):
+def plot_evaluation_results(problem_name, all_results, save_dir = "plots"):
     plt.figure(figsize=(7, 5))
 
     colors = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
@@ -167,4 +183,9 @@ def plot_evaluation_results(problem_name, all_results):
     plt.xscale("log")
     plt.legend()
     plt.grid()
+
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        plt.savefig(os.path.join(save_dir, f"{problem_name}_evaluations.png"), dpi=300, bbox_inches='tight')
+
     plt.show()
