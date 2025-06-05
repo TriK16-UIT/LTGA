@@ -37,4 +37,4 @@ class NKS1Landscape(BaseProblem):
 
             fitness += self.subfunction_tables[i][int(idx)]
 
-        return fitness / self.num_subfunctions
+        return round(fitness / self.num_subfunctions, 1)
